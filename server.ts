@@ -51,9 +51,43 @@ function scanAndMaskPersonalInfo(text: string): string {
 }
 
 // API endpoint for executing the counselor diagnostic helper
+app.post("/api/verify-key", async (req, res) => {
+  try {
+    const { apiKey } = req.body;
+    if (!apiKey) {
+      return res.status(400).json({ valid: false, error: "API Key가 공란입니다." });
+    }
+    const tempAi = new GoogleGenAI({
+      apiKey: apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build-verification',
+        }
+      }
+    });
+    // Request a minimal prompt completion to test validity
+    const response = await tempAi.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: "Hi"
+    });
+    if (response) {
+      return res.json({ valid: true });
+    } else {
+      return res.status(401).json({ valid: false, error: "API 응답이 비어있습니다." });
+    }
+  } catch (error: any) {
+    console.error("API Key Verification Error:", error);
+    return res.status(401).json({ 
+      valid: false, 
+      error: error.message || "유효하지 않은 API Key이거나 네트워크 연결 장애입니다." 
+    });
+  }
+});
+
+// API endpoint for executing the counselor diagnostic helper
 app.post("/api/analyze", async (req, res) => {
   try {
-    const { memo, testResult, additionalInfo } = req.body;
+    const { memo, testResult, additionalInfo, customApiKey } = req.body;
 
     if (!memo) {
       return res.status(400).json({ error: "상담 메모는 필수 입력 항목입니다." });
@@ -64,7 +98,19 @@ app.post("/api/analyze", async (req, res) => {
     const maskedAdditional = additionalInfo ? scanAndMaskPersonalInfo(JSON.stringify(additionalInfo)) : "";
     const maskedResult = testResult ? scanAndMaskPersonalInfo(JSON.stringify(testResult)) : "";
 
-    const ai = getGeminiClient();
+    const finalApiKey = customApiKey || process.env.GEMINI_API_KEY;
+    if (!finalApiKey) {
+      return res.status(401).json({ error: "Gemini API Key가 구성되지 않았습니다. 랜딩페이지에서 개인 키를 등록하거나 서버 환경 변수를 확인하십시오." });
+    }
+
+    const ai = new GoogleGenAI({
+      apiKey: finalApiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
 
     const systemInstruction = `당신은 고용센터 직업상담사의 업무를 지원하는 전문 "AI 진로설계 상담지원 시스템"이다.
 상담사가 입력한 상담 메모와 적성검사 결과, 추가정보를 바탕으로 다음 1~8단계 분석을 수행하여 상담 참고용 객관적 분석 보고서를 생성하라.

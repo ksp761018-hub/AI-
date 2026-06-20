@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { 
   Sparkles, 
   ArrowRight, 
@@ -9,7 +10,14 @@ import {
   Briefcase, 
   Award,
   CheckCircle,
-  FileText
+  FileText,
+  Key,
+  Lock,
+  Unlock,
+  RefreshCw,
+  ExternalLink,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react";
 import { SampleCase } from "../data/sampleCases";
 
@@ -24,8 +32,128 @@ export default function LandingPage({
   onStartWorkspace, 
   onSelectCaseAndStart 
 }: LandingPageProps) {
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [isVerified, setIsVerified] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
+  const [loadingStep, setLoadingStep] = useState(0);
+  const [errorText, setErrorText] = useState("");
+  const [shaking, setShaking] = useState(false);
+  const [isGuideOpen, setIsGuideOpen] = useState(true);
+
+  useEffect(() => {
+    // Check if key already exists and is active in local storage
+    const saved = localStorage.getItem("user_gemini_api_key");
+    if (saved) {
+      setApiKeyInput(saved);
+      setIsVerified(true);
+    }
+  }, []);
+
+  const triggerShake = () => {
+    setShaking(true);
+    setTimeout(() => setShaking(false), 500);
+  };
+
+  const handleVerify = async () => {
+    setErrorText("");
+    const trimmed = apiKeyInput.trim();
+    if (!trimmed) {
+      setErrorText("Gemini API Key를 입력해주십시오.");
+      triggerShake();
+      return;
+    }
+
+    if (!trimmed.startsWith("AIzaSy")) {
+      setErrorText("형식이 올바르지 않습니다. 구글 Gemini API Key는 일반적으로 'AIzaSy'로 시작합니다.");
+      triggerShake();
+      return;
+    }
+
+    setIsValidating(true);
+    setLoadingStep(0);
+
+    // Advanced encryption step cycle feel for authentic feel
+    const stepInterval = setInterval(() => {
+      setLoadingStep((prev) => (prev < 2 ? prev + 1 : prev));
+    }, 600);
+
+    try {
+      const response = await fetch("/api/verify-key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey: trimmed })
+      });
+
+      clearInterval(stepInterval);
+
+      if (!response.ok) {
+        const errJson = await response.json().catch(() => ({ error: "인증 응답 파싱 실패" }));
+        throw new Error(errJson.error || "API Key가 유효하지 않거나 비활성화되었습니다.");
+      }
+
+      const resData = await response.json();
+      if (resData.valid) {
+        localStorage.setItem("user_gemini_api_key", trimmed);
+        setIsVerified(true);
+      } else {
+        throw new Error("유효하지 않은 API Key 판단(서버측 거부)");
+      }
+    } catch (err: any) {
+      clearInterval(stepInterval);
+      setErrorText(err.message || "서버 통신 중 장애가 발생했습니다. 키를 다시 확인해주세요.");
+      triggerShake();
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  const handleDisconnect = () => {
+    localStorage.removeItem("user_gemini_api_key");
+    setApiKeyInput("");
+    setIsVerified(false);
+    setErrorText("");
+  };
+
+  const handleEnterWorkspace = () => {
+    if (!isVerified) {
+      setErrorText("⚠️ 업무 데스크에 진입하려면 먼저 아래 게이트에서 Gemini API Key 연동 및 승인을 마쳐야 합니다.");
+      triggerShake();
+      const el = document.getElementById("key-auth-card");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      return;
+    }
+    onStartWorkspace();
+  };
+
+  const handleCaseExecution = (caseObj: SampleCase) => {
+    if (!isVerified) {
+      setErrorText("⚠️ 해당 케이스를 즉시 가동하시려면 먼저 Gemini API Key 등록 및 승인 단계를 거쳐야 합니다.");
+      triggerShake();
+      const el = document.getElementById("key-auth-card");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      return;
+    }
+    onSelectCaseAndStart(caseObj);
+  };
+
   return (
     <div id="landing_container" className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
+      {/* Dynamic shake & premium styling embedded */}
+      <style>{`
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+          20%, 40%, 60%, 80% { transform: translateX(5px); }
+        }
+        .animate-shake {
+          animation: shake 0.5s ease-in-out;
+        }
+      `}</style>
+
       {/* Premium Sleek Navigation Header */}
       <header className="min-h-16 sm:h-20 border-b border-slate-800/80 flex flex-col sm:flex-row items-center justify-between px-4 sm:px-6 md:px-12 py-3 sm:py-0 sticky top-0 bg-slate-950/90 backdrop-blur-md z-50 gap-3 sm:gap-0">
         <div className="flex items-center gap-2.5 min-w-0 self-start sm:self-auto">
@@ -43,14 +171,18 @@ export default function LandingPage({
         
         <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
           <button
-            onClick={onStartWorkspace}
+            onClick={handleEnterWorkspace}
             className="hidden md:flex hover:text-white text-slate-300 text-xs font-semibold px-3 py-2 transition-all cursor-pointer"
           >
             기능 소개
           </button>
           <button
-            onClick={onStartWorkspace}
-            className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-xs font-bold px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all duration-300 shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/30 cursor-pointer"
+            onClick={handleEnterWorkspace}
+            className={`w-full sm:w-auto active:scale-95 text-xs font-bold px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all duration-300 shadow-lg cursor-pointer ${
+              isVerified 
+                ? "bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/20" 
+                : "bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-750"
+            }`}
           >
             <span>업무 데스크 입장</span>
             <ArrowRight className="w-3.5 h-3.5" />
@@ -61,7 +193,7 @@ export default function LandingPage({
       {/* Main Content Sections */}
       <main className="flex-1 flex flex-col">
         {/* Hero Banner Section */}
-        <section className="relative pt-16 pb-20 px-6 md:px-12 max-w-7xl mx-auto w-full flex flex-col items-center text-center">
+        <section className="relative pt-12 pb-16 px-6 md:px-12 max-w-7xl mx-auto w-full flex flex-col items-center text-center">
           {/* Subtle Decorative Background Blob */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-indigo-600/10 blur-[120px] rounded-full pointer-events-none"></div>
           
@@ -82,10 +214,221 @@ export default function LandingPage({
             진로미결정 요인의 과학적 6개 분야 점수화 분석과 맞춤 실행계획을 제공하여 상담의 성장을 완벽히 서포트합니다.
           </p>
 
+          {/* Interactive API Key Validation Box with guide */}
+          <div 
+            id="key-auth-card" 
+            className={`mt-10 w-full max-w-xl bg-slate-950/85 border ${
+              isVerified ? "border-emerald-500/50 shadow-emerald-500/10 shadow-2xl" : "border-slate-800 shadow-xl"
+            } rounded-2xl p-6 text-left transition-all duration-300 relative ${
+              shaking ? "animate-shake" : ""
+            }`}
+          >
+            {/* Soft decorative light indicator */}
+            <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${isVerified ? 'from-emerald-500/10' : 'from-indigo-500/10'} blur-3xl rounded-full pointer-events-none`} />
+
+            {/* Header: 무료로 시작하세요. */}
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center text-white shrink-0">
+                <CheckCircle className="w-4 h-4 text-white" />
+              </div>
+              <span className="text-xs sm:text-sm font-bold text-slate-100">
+                무료로 시작하세요. Gemini API 키만 있으면 됩니다.
+              </span>
+            </div>
+
+            {/* Input & Action Block */}
+            <div className="space-y-3.5">
+              {isVerified ? (
+                <div className="bg-slate-900/60 border border-emerald-500/20 rounded-xl p-4 flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-[9px] text-slate-500 font-mono font-bold">AUTHORIZED SESSION KEY</p>
+                    <p className="text-xs font-mono font-extrabold text-emerald-400 truncate mt-0.5">
+                      {apiKeyInput.substring(0, 12)}••••••••••••••••••••••••{apiKeyInput.substring(apiKeyInput.length - 4)}
+                    </p>
+                  </div>
+                  <button 
+                    onClick={handleDisconnect}
+                    className="text-[11px] font-bold text-red-400 hover:text-red-300 hover:bg-red-500/10 px-3.5 py-1.5 rounded-lg border border-red-500/20 transition-all shrink-0 cursor-pointer"
+                  >
+                    동기화 해제
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <div className="relative flex-1">
+                    <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input 
+                      type="password"
+                      value={apiKeyInput}
+                      onChange={(e) => {
+                        setApiKeyInput(e.target.value);
+                        if (errorText) setErrorText("");
+                      }}
+                      placeholder="Gemini API Key 입력"
+                      disabled={isValidating}
+                      className="w-full bg-slate-900 border border-slate-850 rounded-xl pl-10 pr-4 py-3 text-xs sm:text-sm font-mono text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition-all disabled:opacity-50"
+                    />
+                  </div>
+                  <button 
+                    onClick={handleVerify}
+                    disabled={isValidating}
+                    className="bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-xs sm:text-sm font-bold px-6 py-3 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0 disabled:opacity-50 min-w-[100px]"
+                  >
+                    {isValidating ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>인증중</span>
+                      </>
+                    ) : (
+                      <span>시작하기</span>
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {/* Loader step indicators & Errors */}
+              <div className="flex flex-col gap-2">
+                {isValidating && (
+                  <p className="text-[11px] text-indigo-400 font-semibold flex items-center gap-1.5 animate-pulse">
+                    <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-ping" />
+                    <span>
+                      {loadingStep === 0 && "보안 암호화 세션 매핑 중..."}
+                      {loadingStep === 1 && "Google Gemini Ping 응답 확인 중..."}
+                      {loadingStep === 2 && "최종 무결성 사양 연산 마크업 처리 중..."}
+                    </span>
+                  </p>
+                )}
+
+                {errorText && (
+                  <p className="text-[11px] text-red-400 font-semibold flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                    <span>{errorText}</span>
+                  </p>
+                )}
+
+                {isVerified && (
+                  <p className="text-[11px] text-emerald-400 font-bold flex items-center gap-1.5">
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span>실시간 고성능 진단 서비스 연계 승인 승낙 완료</span>
+                  </p>
+                )}
+              </div>
+
+              {/* Collapsible Gemini API Key Issuance Guide Card */}
+              <div className="mt-4 border border-slate-800 bg-slate-900/40 rounded-xl overflow-hidden transition-all duration-300">
+                <button
+                  type="button"
+                  onClick={() => setIsGuideOpen(!isGuideOpen)}
+                  className="w-full flex items-center justify-between px-4 py-3.5 bg-slate-900/80 hover:bg-slate-900 text-slate-200 hover:text-white transition-all cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <HelpCircle className="w-4 h-4 text-indigo-400" />
+                    <span className="text-xs sm:text-sm font-bold">Gemini API Key 발급 가이드</span>
+                  </div>
+                  {isGuideOpen ? <ChevronUp className="w-4 h-4 text-slate-450" /> : <ChevronDown className="w-4 h-4 text-slate-450" />}
+                </button>
+
+                {isGuideOpen && (
+                  <div className="px-4 py-4 border-t border-slate-800 bg-slate-900/20 space-y-4">
+                    {/* Step 1 */}
+                    <div className="flex gap-3">
+                      <div className="w-5 h-5 bg-indigo-500/10 text-indigo-300 rounded font-bold text-xs flex items-center justify-center shrink-0 border border-indigo-500/30">
+                        1
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-white">Google AI Studio 접속</h4>
+                        <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+                          아래 링크를 클릭하여 Google AI Studio에 접속하세요.
+                        </p>
+                        <a 
+                          href="https://aistudio.google.com/apikey"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold border-b border-indigo-400/20 hover:border-indigo-400 inline-block mt-1 transition-all"
+                        >
+                          https://aistudio.google.com/apikey
+                        </a>
+                      </div>
+                    </div>
+
+                    {/* Step 2 */}
+                    <div className="flex gap-3">
+                      <div className="w-5 h-5 bg-indigo-500/10 text-indigo-300 rounded font-bold text-xs flex items-center justify-center shrink-0 border border-indigo-500/30">
+                        2
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-white">Google 계정으로 로그인</h4>
+                        <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+                          Gmail 계정으로 로그인하세요. 계정이 없으면 무료로 만들 수 있어요.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Step 3 */}
+                    <div className="flex gap-3">
+                      <div className="w-5 h-5 bg-indigo-500/10 text-indigo-300 rounded font-bold text-xs flex items-center justify-center shrink-0 border border-indigo-500/30">
+                        3
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-white">'API 키 만들기' 클릭</h4>
+                        <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+                          화면에서 'Create API Key' 또는 'API 키 만들기' 버튼을 클릭하세요.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Step 4 */}
+                    <div className="flex gap-3">
+                      <div className="w-5 h-5 bg-indigo-500/10 text-indigo-300 rounded font-bold text-xs flex items-center justify-center shrink-0 border border-indigo-500/30">
+                        4
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-white">프로젝트 선택 후 생성</h4>
+                        <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+                          기본 프로젝트를 선택하고 'Create API key in existing project'를 클릭하세요.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Step 5 */}
+                    <div className="flex gap-3">
+                      <div className="w-5 h-5 bg-indigo-500/10 text-indigo-300 rounded font-bold text-xs flex items-center justify-center shrink-0 border border-indigo-500/30">
+                        5
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-white">API 키 복사</h4>
+                        <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+                          생성된 API 키(AIza로 시작)를 복사하세요. 이 키를 입력창에 붙여넣기하면 됩니다!
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Go to API Key Issuance page button */}
+                    <div className="pt-2 border-t border-slate-800">
+                      <a
+                        href="https://aistudio.google.com/apikey"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="w-full bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-800 text-indigo-300 hover:text-white text-xs font-bold py-2.5 px-4 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer text-center"
+                      >
+                        <span>🔑 API 키 발급 페이지로 이동</span>
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div className="mt-10 flex flex-col sm:flex-row gap-4 justify-center w-full max-w-md">
             <button
-              onClick={onStartWorkspace}
-              className="px-6 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 hover:shadow-xl shadow-indigo-600/20 cursor-pointer"
+              onClick={handleEnterWorkspace}
+              className={`px-6 py-3.5 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 hover:shadow-xl cursor-pointer ${
+                isVerified 
+                  ? "bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/20" 
+                  : "bg-slate-800 text-slate-400 border border-slate-700"
+              }`}
             >
               <Briefcase className="w-4 h-4" />
               신규 진단 데스크 시작하기
@@ -208,7 +551,9 @@ export default function LandingPage({
               return (
                 <div 
                   key={cs.id}
-                  className="bg-slate-950/40 border border-slate-800 hover:border-indigo-500/50 rounded-2xl p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-xl hover:shadow-indigo-500/5 group"
+                  className={`bg-slate-950/40 border hover:border-indigo-500/50 rounded-2xl p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-xl hover:shadow-indigo-500/5 group ${
+                    isVerified ? "border-slate-800" : "border-slate-800/60 opacity-80"
+                  }`}
                 >
                   <div>
                     <div className="flex justify-between items-start gap-4 mb-4">
@@ -248,8 +593,12 @@ export default function LandingPage({
 
                   <div className="mt-6 pt-4 border-t border-slate-800/80">
                     <button
-                      onClick={() => onSelectCaseAndStart(cs)}
-                      className="w-full bg-slate-900 group-hover:bg-indigo-600 group-hover:text-white border border-slate-800/80 group-hover:border-indigo-500 text-slate-300 text-xs font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                      onClick={() => handleCaseExecution(cs)}
+                      className={`w-full text-xs font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        isVerified 
+                          ? "bg-slate-900 border border-slate-800/80 group-hover:bg-indigo-600 group-hover:text-white group-hover:border-indigo-500 text-slate-300" 
+                          : "bg-slate-950/80 border border-slate-900 text-slate-600"
+                      }`}
                     >
                       <span>이 케이스 대입하여 진단 실행</span>
                       <ArrowRight className="w-3.5 h-3.5" />

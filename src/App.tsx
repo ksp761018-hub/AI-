@@ -197,12 +197,16 @@ export default function App() {
     };
 
     try {
+      const customApiKey = localStorage.getItem("user_gemini_api_key") || "";
       const response = await fetch("/api/analyze", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          ...payload,
+          customApiKey
+        })
       });
 
       clearInterval(stepInterval);
