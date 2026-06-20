@@ -56,18 +56,26 @@ export default function LandingPage({
 
   const handleVerify = async () => {
     setErrorText("");
-    const trimmed = apiKeyInput.trim();
-    if (!trimmed) {
+    let key = apiKeyInput.trim();
+    
+    // Strip leading/trailing double or single quotes if pasted accidentally
+    if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) {
+      key = key.slice(1, -1).trim();
+    }
+
+    if (!key) {
       setErrorText("Gemini API Key를 입력해주십시오.");
       triggerShake();
       return;
     }
 
-    if (!trimmed.startsWith("AIzaSy")) {
-      setErrorText("형식이 올바르지 않습니다. 구글 Gemini API Key는 일반적으로 'AIzaSy'로 시작합니다.");
-      triggerShake();
-      return;
+    // Dynamic warning but still allowing verification to bypass hard block
+    if (!key.startsWith("AIzaSy")) {
+      setErrorText("주의: 입력된 키가 표준 구글 API Key 형식('AIzaSy'로 시작)과 다릅니다. 계속 확인을 진행합니다.");
     }
+
+    // Apply cleaned key to display
+    setApiKeyInput(key);
 
     setIsValidating(true);
     setLoadingStep(0);
@@ -81,7 +89,7 @@ export default function LandingPage({
       const response = await fetch("/api/verify-key", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey: trimmed })
+        body: JSON.stringify({ apiKey: key })
       });
 
       clearInterval(stepInterval);
@@ -93,8 +101,9 @@ export default function LandingPage({
 
       const resData = await response.json();
       if (resData.valid) {
-        localStorage.setItem("user_gemini_api_key", trimmed);
+        localStorage.setItem("user_gemini_api_key", key);
         setIsVerified(true);
+        setErrorText(""); // clear warning if verified successfully
       } else {
         throw new Error("유효하지 않은 API Key 판단(서버측 거부)");
       }
