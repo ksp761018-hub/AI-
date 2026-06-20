@@ -1,0 +1,6 @@
+{
+  "name": "AI 진로설계 상담지원 시스템",
+  "description": "고용센터 직업상담사를 위한 진로설계 상담지원 - 객관적 메모 분석, 심리 불안 및 위험 신호 탐지, 진로미결정 유형 판단 및 다음 회기 성장을 지원하는 인공지능 보조 시스템",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
